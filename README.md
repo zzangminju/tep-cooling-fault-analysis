@@ -167,8 +167,8 @@ jupyter
 ### 1. 저장소 다운로드
 
 ```bash
-git clone <repository-url>
-cd tep-timeseries
+git clone https://github.com/zzangminju/tep-fault4-timeseries.git
+cd tep-fault4-timeseries
 ```
 
 ### 2. 가상환경 생성
