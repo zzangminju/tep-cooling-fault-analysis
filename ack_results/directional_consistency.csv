@@ -1,0 +1,6 @@
+Metric,F14 worse (pairs),Equal (pairs),Total pairs,F14 worse (%)
+Recovery_min,20,3,30,66.66666666666666
+InRange_%,30,0,30,100.0
+IAE,30,0,30,100.0
+ISE,30,0,30,100.0
+Control_Burden,30,0,30,100.0

@@ -1,352 +1,312 @@
-# TEP Cooling-System Fault Analysis
+# TEP 냉각계 고장 회복 분석
 
-### Tennessee Eastman Process 냉각계 고장의 시계열 동적 특성 및 제어성능 비교
+> 이 문서는 **화학공학을 전공하지 않은 사람도 읽을 수 있도록** 전문용어를 처음 등장할 때 쉽게 풀어 설명합니다.
 
-Tennessee Eastman Process(TEP)의 냉각계 관련 이상인 **Fault 4**와 **Fault 14**를 비교한 시계열 데이터 분석 프로젝트입니다.
+Tennessee Eastman Process(TEP)의 냉각계 Fault 4와 Fault 14를 대상으로, **최초 정상범위 복귀시간만으로 공정 회복성을 평가해도 충분한가?**를 분석한 시계열 프로젝트입니다.
 
-단순히 고장 전후 그래프를 비교하는 데서 끝내지 않고 다음을 정량적으로 분석했습니다.
+- **TEP(Tennessee Eastman Process)**: 실제 화학공장을 단순화해 컴퓨터에서 재현한 대표적인 공정 시뮬레이션 모델입니다.
+- **공정(Process)**: 원료를 반응·분리·냉각하는 등 여러 단계를 거쳐 제품을 만드는 전체 과정입니다.
+- **Fault**: 공정에 생긴 고장이나 비정상 상황입니다.
+- **냉각계**: 반응기 온도를 낮추기 위해 냉각수를 보내고 조절하는 장치와 제어계통입니다.
+- **시계열 데이터**: 시간 순서대로 기록된 데이터입니다.
 
-- 정상범위 최초 복귀시간
-- 실제 안정화 시간
-- 정상범위 체류율
-- 온도 제어오차
-- 냉각수 관련 제어신호의 움직임
-- 반복 진동
-- 변수 간 시간관계
-- 집계방법에 따른 해석 차이
+초기 공개 reference data 분석에서 시작해, 최종적으로 동일한 30개 random seed를 사용한 **60회 paired closed-loop simulation**까지 확장했습니다.
 
----
+여기서:
 
-## 1. 분석 대상
-
-두 Fault는 모두 반응기 냉각계와 관련되어 있지만 원인이 다릅니다.
-
-| Fault | 설명 |
-|---|---|
-| **Fault 4** | Reactor Cooling Water Inlet Temperature Step |
-| **Fault 14** | Reactor Cooling Water Valve Sticking |
-
-Fault 4는 냉각수 유입 온도 조건이 갑자기 변하는 이상이고, Fault 14는 냉각수 밸브가 원활하게 움직이지 않는 이상입니다.
-
-본 프로젝트에서는 두 고장이 반응기 온도와 제어시스템에 서로 다른 시계열 패턴을 만드는지 비교했습니다.
+- **random seed**: 컴퓨터가 만드는 랜덤 변화를 다시 똑같이 재현하기 위한 번호입니다.
+- **paired simulation**: Fault 4와 Fault 14를 같은 seed로 짝지어 고장 전 조건을 최대한 같게 맞춘 비교 실험입니다.
+- **closed-loop**: 센서값을 보고 제어기가 자동으로 밸브 등을 조절하는 제어 방식입니다.
+- **비모수 통계검정**: 데이터가 특정 분포를 따른다고 강하게 가정하지 않고 두 조건의 차이를 비교하는 통계 방법입니다.
+- **effect size(효과크기)**: 단순히 “차이가 있다/없다”가 아니라 그 차이가 얼마나 크고 일관적인지 보여주는 값입니다.
+- **민감도 분석**: 분석 기준을 조금 바꿔도 결론이 유지되는지 확인하는 과정입니다.
 
 ---
 
-## 2. 핵심 분석 질문
+## 1. 핵심 결과
 
-1. Fault 4와 Fault 14의 반응기 온도 패턴은 어떻게 다른가?
-2. 정상범위에 처음 돌아오는 시간과 실제 안정화 시간은 같은가?
-3. Fault 발생 후 온도 제어성능은 정상 운전보다 얼마나 나빠지는가?
-4. 반응기 온도를 유지하기 위해 제어신호는 평소보다 얼마나 크게 움직이는가?
-5. 이동평균이나 시간차 분석방법에 따라 같은 데이터를 다르게 해석할 가능성은 없는가?
+**Recovery Time(최초 복귀시간)**은 공정 회복의 한 측면만 보여주며, 안정적 회복을 대표하는 단독 지표로는 불안정할 수 있습니다.
 
----
+Recovery Time은 “고장 이후 값이 정상범위 안에 **처음 한 번 들어온 시점**”만 보기 때문에 이후 다시 크게 흔들리는지까지는 알려주지 못합니다.
 
-## 3. Fault 4 vs Fault 14
+주 분석에서는 각 run의 고장 전 데이터를 이용해 `평균 ± 2표준편차(±2σ)`를 정상범위로 정했습니다.
 
-![Fault 4 vs Fault 14 Temperature](images/10_temperature_fault_comparison.png)
-
-두 Fault는 뚜렷하게 다른 형태를 보였습니다.
-
-**Fault 4**
-
-> 순간적인 큰 온도 변화 → 빠른 최초 회복 → 이후 안정화
-
-**Fault 14**
-
-> 지속적인 온도 진동 → 매우 낮은 정상범위 체류율 → 안정화 실패
-
-Fault 4는 고장 직후 한 번 크게 움직인 뒤 비교적 빠르게 정상 수준으로 돌아왔습니다.
-
-반면 Fault 14는 고장 이후에도 온도가 계속 위아래로 크게 움직였습니다.
-
----
-
-## 4. 핵심 결과
-
-| Metric | Fault 4 | Fault 14 |
+| 지표 | Fault 4 | Fault 14 |
 |---|---:|---:|
-| Recovery Time | **3 min** | **9 min** |
-| Settling Time | **57 min** | **Not settled** |
-| In-range Ratio | **77.5%** | **2.5%** |
-| IAE | **0.0494** | **0.4415** |
-| ISE | **0.00333** | **0.12130** |
-| Control Burden | **7.364** | **12.679** |
-| IAE / Normal | **1.66×** | **15.08×** |
-| ISE / Normal | **4.56×** | **175.81×** |
-| Control Burden / Normal | **8.34×** | **15.60×** |
+| Recovery Time 중앙값 | 6.0분 | 19.5분 |
+| 정상범위 체류율 | 90.0% | 8.75% |
+| IAE | 0.0418 | 0.4291 |
+| ISE | 0.0022 | 0.1190 |
+| Control Burden | 7.4401 | 12.1264 |
+| 4시간 관측창 안에서 안정화 | 30/30 | 0/30 |
 
-가장 중요한 결과는 **정상범위에 한 번 들어온 것과 실제로 안정된 것은 다르다**는 점입니다.
+Fault 14는 Fault 4보다 훨씬 오래 흔들리고, 정상범위에 머무는 비율도 훨씬 낮았습니다.
 
-Fault 4는 3분 만에 정상범위에 처음 돌아왔지만 안정적으로 정상범위에 머무르기 시작하기까지는 57분이 걸렸습니다.
+그런데 **Recovery Time만 보면 항상 Fault 14가 더 나쁘게 나오지는 않았습니다.**
 
-Fault 14는 9분 후 한 번 정상범위에 들어왔지만 이후 계속 이탈하여 관측기간 동안 안정적인 정착이 확인되지 않았습니다.
+- Fault 14의 Recovery Time이 더 긴 경우: 20/30
+- 같은 경우: 3/30
+- Fault 14가 오히려 더 짧은 경우: 7/30
 
----
+반면 아래 지표들은 30/30 모든 paired run에서 같은 방향으로 Fault 14가 더 나빴습니다.
 
-## 5. 핵심 권장 시각화 3개
-
-본 프로젝트에서 가장 중요한 시각화는 다음 세 가지입니다.
-
-| 시각화 | 목적 |
-|---|---|
-| **Fault 4 vs Fault 14 원본 시계열** | 고장 종류에 따라 온도 반응 형태가 어떻게 달라지는지 직접 비교 |
-| **30분 이동평균** | 작은 변동을 줄여 전체 흐름을 확인하고 평활화의 한계도 확인 |
-| **정상 대비 성능 저하 비교** | IAE, ISE, Control Burden이 정상 운전보다 얼마나 증가했는지 비교 |
-
-### 5.1 원본 시계열
-
-![Fault Comparison](images/10_temperature_fault_comparison.png)
-
-Fault 4는 짧고 강한 변화가 중심인 반면 Fault 14는 반복적인 진동이 지속되었습니다.
-
-### 5.2 30분 이동평균
-
-![30-minute Moving Average](images/02_moving_average.png)
-
-이동평균은 전체적인 흐름을 보기 쉽게 하지만 순간적인 Fault 신호를 작게 보이게 할 수 있습니다.
-
-따라서 이동평균만으로 이상 여부를 판단하지 않고 원본 데이터와 함께 분석했습니다.
-
-### 5.3 정상 대비 성능 저하
-
-![Normalized Performance](images/09_normalized_fault_comparison.png)
-
-정상 운전을 1배로 두었을 때 Fault 14는 IAE, ISE, Control Burden 모두에서 Fault 4보다 큰 성능 저하를 보였습니다.
-
----
-
-## 6. 집계방법에 따른 반례
-
-같은 데이터라도 집계방법에 따라 결과가 다르게 보일 수 있는지 확인했습니다.
-
-Fault 발생 후 첫 2시간의 반응기 온도를 **원본 3분 데이터**와 **30분 이동평균**으로 비교했습니다.
-
-| Fault | Raw Max Abs. Deviation | 30-min MA Max Abs. Deviation | Normal ±2σ Half Width |
-|---|---:|---:|---:|
-| Fault 4 | **0.2007 °C** | **0.0267 °C** | **0.0383 °C** |
-| Fault 14 | **0.3799 °C** | **0.0369 °C** | **0.0373 °C** |
-
-원본 데이터에서는 두 Fault 모두 정상범위를 크게 벗어나는 변화가 확인되었습니다.
-
-그러나 30분 이동평균에서는 최대 편차가 정상범위 반폭보다 작아졌습니다.
-
-즉 이동평균만 확인하면 순간적인 spike나 빠른 진동을 실제보다 작게 평가할 가능성이 있습니다.
-
-따라서 본 프로젝트에서는 **이동평균은 전체 흐름 확인용으로 사용하고, Fault 분석에는 원본 3분 데이터도 함께 사용했습니다.**
-
----
-
-## 7. 공정 출력과 제어신호
-
-Fault 4에서는 반응기 온도가 비교적 빠르게 정상 수준으로 돌아왔지만 냉각수 관련 조작변수 `XMV(10)`은 이전보다 높은 수준에서 움직였습니다.
-
-![Control Response](images/04_control_response.png)
-
-Fault 발생 순간 XMV(10)은 약 **16.1% 증가**했습니다.
-
-이를 통해:
-
-> **공정 출력값이 정상처럼 보여도 제어시스템은 평소보다 더 크게 움직이고 있을 수 있다.**
-
-는 점을 확인했습니다.
-
----
-
-## 8. Control Burden
-
-제어신호의 움직임을 정량적으로 비교하기 위해 **Control Burden**을 정의했습니다.
-
-Control Burden은 XMV(10)이 정상 평균에서 벗어난 절대적인 크기를 시간에 따라 누적한 값입니다.
-
-![Control Burden](images/08_control_burden.png)
-
-정상 2시간 구간과 비교하면:
-
-- Fault 4: **8.34× normal**
-- Fault 14: **15.60× normal**
-
-이었습니다.
-
-Control Burden은 실제 냉각수 사용량이나 에너지 소비량이 아니라 **제어신호의 움직임을 비교하기 위한 분석지표**입니다.
-
----
-
-## 9. Fault 14의 반복 진동
-
-Fault 14의 반복적인 온도 움직임이 단순한 random noise인지 확인하기 위해 자기상관(Autocorrelation)을 분석했습니다.
-
-![Fault 14 Autocorrelation](images/11_fault14_autocorrelation.png)
-
-여러 시간차에서 높은 자기상관이 반복적으로 나타났습니다.
-
-이는 Fault 14의 온도 변화가 단순한 무작위 흔들림보다는 **반복적인 구조를 포함하고 있음을 보여줍니다.**
-
-FFT 분석에서도 빠른 반복 성분이 확인되었습니다.
-
-다만 데이터가 3분 간격이기 때문에 계산된 약 6.6분을 정확한 물리적 진동주기로 단정하지 않았습니다.
-
----
-
-## 10. 사용한 분석 방법
-
-- Moving Average
-- First Difference
-- Rolling Standard Deviation
-- Recovery Time
-- Settling Time
 - In-range Ratio
 - IAE
 - ISE
 - Control Burden
-- Cross-correlation
-- Autocorrelation
-- FFT
 
-분석기법을 많이 사용하는 것보다 **각 방법으로 얻은 결과가 실제 공정에서 무엇을 의미하는지 해석하는 것**에 중점을 두었습니다.
+즉, **처음 정상범위에 들어온 시점보다 이후에 얼마나 안정적으로 머무는지가 더 중요할 수 있습니다.**
 
----
+### 대표 시각화
 
-## 11. Chemical Engineering Relevance
+![Fault 4와 Fault 14의 First Recovery와 Stable Recovery 비교](ack_images/08_final_recovery_figure_v2.png)
 
-본 프로젝트는 다음 화학공학 분야와 연결됩니다.
+![Recovery Time과 In-range Ratio 분포](ack_images/06_recovery_inrange_distribution.png)
 
-**Process Monitoring**  
-센서값과 조작변수를 함께 이용한 공정상태 모니터링
-
-**Fault Diagnosis**  
-고장별 시간적 패턴을 이용한 이상 유형 구분
-
-**Process Control**  
-Recovery Time, Settling Time, IAE, ISE를 이용한 제어성능 평가
-
-**Predictive Maintenance**  
-밸브 및 냉각계 제어신호의 비정상적인 움직임 탐색
-
-**Process Safety**  
-냉각계 이상 이후 순간적인 정상 복귀가 아닌 실제 안정적인 회복 여부 평가
+![IAE, ISE and Control Burden 분포](ack_images/07_error_control_distribution.png)
 
 ---
 
-## 12. Data
+## 2. 왜 Fault 4와 Fault 14를 비교했나?
 
-Tennessee Eastman Process reference test data를 사용했습니다.
+두 fault는 모두 **반응기 냉각계**에 영향을 주지만 고장 방식이 다릅니다.
+
+- **Fault 4**: 반응기로 들어가는 냉각수의 입구 온도가 갑자기 한 단계 변하는 외란(step disturbance)입니다.
+- **Fault 14**: 반응기 냉각수를 조절하는 밸브가 걸려서(sticking) 부드럽게 움직이지 않는 고장입니다.
+- **Reactor(반응기)**: 화학반응이 실제로 일어나는 장치입니다.
+- **Cooling water(냉각수)**: 반응기의 열을 빼기 위해 순환시키는 물입니다.
+- **XMEAS(9)**: TEP에서 9번째 측정변수로 기록되는 반응기 온도입니다.
+- **XMV(10)**: TEP에서 10번째 조작변수로 기록되는 반응기 냉각수 관련 제어입력입니다.
+
+두 fault는 같은 **reactor cooling system(반응기 냉각계)**에 영향을 주지만 **fault mechanism(고장이 생기는 방식)**이 다릅니다.
+
+그래서 같은 계통에서 서로 다른 **post-fault dynamics(고장 이후 시간에 따른 움직임)**를 비교할 수 있습니다.
+
+---
+
+## 3. 반복 시뮬레이션 조건
+
+- Simulator: `jkitchin/tennessee-eastman-profbraatz`
+- Commit: `9a6c8e5fcef4a2850778704e7793c87b0a187005`
+- Backend: pure Python
+- Control mode: closed-loop
+- Controller: decentralized multi-loop PI
+  - **PI 제어기**: 현재 오차와 누적된 오차를 이용해 밸브 같은 조작값을 자동으로 조절하는 대표적인 제어기입니다.
+  - **decentralized multi-loop**: 여러 개의 PI 제어기가 각각 담당 변수를 나누어 조절하는 구조입니다.
+- Simulation time: 12시간
+- Fault 발생: 8시간
+- 기록 간격: 3분
+- Seeds: 101~130
+- Fault별 30회, 총 60회
+- Shutdown: 0/60
+  - **Shutdown**: 공정이 안전 또는 운전 조건을 벗어나 시뮬레이션이 강제로 정지한 경우입니다.
+
+Fault 4와 Fault 14에는 같은 seed를 사용했습니다.
+
+이렇게 하면 고장 전의 랜덤 조건을 최대한 같게 맞춘 상태에서 두 fault를 비교할 수 있습니다.
+
+대표 seed 101에서 **pre-fault(고장 발생 전)** Reactor Temperature trajectory의 최대 절대차는 **0.0**이었습니다.
+
+즉 두 실험은 고장 전에는 완전히 같은 온도 흐름에서 출발했고, 8시간 이후 서로 다른 fault만 적용되었습니다.
+
+---
+
+## 4. 사용한 지표
+
+각 run의 0~8시간 pre-fault Reactor Temperature에서 `mean ± 2σ`를 주 분석 **normal band(통계적 정상범위)**로 사용합니다.
+
+- **mean(평균)**: 고장 전 온도의 평균값입니다.
+- **σ(시그마, 표준편차)**: 값들이 평균 주변에서 얼마나 흔들리는지를 나타내는 값입니다.
+- **mean ± 2σ**: 평균에서 위아래로 표준편차의 2배만큼 잡은 범위입니다.
+
+이 범위는 실제 산업 안전범위가 아니라 분석용 통계 기준입니다.
+
+### Recovery Time
+
+Fault 발생 후 Reactor Temperature가 **처음 정상범위에 들어오기까지 걸린 시간**입니다.
+
+### Settling Time
+
+값이 정상범위에 들어온 뒤 **30분 연속으로 그 안에 머물기 시작한 시점**입니다.
+
+데이터가 3분 간격이므로 30분 연속 유지는 11개 연속 측정값으로 판단했습니다.
+
+### In-range Ratio
+
+Fault 후 첫 2시간 중 측정값이 정상범위 안에 있었던 비율입니다.
+
+### IAE
+
+**IAE(적분절대오차)**는 온도가 정상 평균에서 얼마나 벗어났는지를 절대값으로 바꾼 뒤 시간에 따라 모두 더한 값입니다.
+
+값이 클수록 전체적으로 오차가 오래 또는 크게 지속됐다는 뜻입니다.
+
+### ISE
+
+**ISE(적분제곱오차)**는 오차를 제곱해 시간에 따라 더한 값입니다.
+
+큰 오차에 더 큰 벌점을 주기 때문에 큰 흔들림에 특히 민감합니다.
+
+### Control Burden
+
+**Control Burden(제어입력 부담)**은 XMV(10)이 정상 평균에서 얼마나 벗어나 있었는지를 시간에 따라 누적한 값입니다.
+
+주의: 실제 냉각수 사용량이나 에너지 소비량을 의미하지 않습니다.
+
+---
+
+## 5. 통계 결과
+
+같은 seed끼리 짝지은 연속형 지표에는 **Wilcoxon signed-rank test**를 적용했고 5개 검정에는 **Holm correction**을 사용했습니다.
+
+- **Wilcoxon signed-rank test**: 같은 조건으로 짝지어진 두 그룹의 값이 전반적으로 다른지 확인하는 비모수 통계검정입니다.
+- **p-value**: 지금 같은 차이가 우연만으로 나타날 가능성을 판단하는 값입니다.
+- **Holm correction**: 여러 지표를 동시에 검정할 때 우연히 유의한 결과가 나올 가능성을 줄이는 보정 방법입니다.
+- **Rank-biserial r**: paired 차이가 어느 방향으로 얼마나 일관되게 나타나는지 보여주는 효과크기입니다.
+
+| 지표 | Holm-adjusted p | Rank-biserial r |
+|---|---:|---:|
+| Recovery Time | 3.41e-4 | 0.788 |
+| In-range Ratio | 3.15e-6 | -1.000 |
+| IAE | 9.31e-9 | 1.000 |
+| ISE | 9.31e-9 | 1.000 |
+| Control Burden | 9.31e-9 | 1.000 |
+
+특히 In-range Ratio, IAE, ISE, Control Burden은 **30쌍 모두 같은 방향으로 Fault 14가 더 나빴습니다.**
+
+---
+
+## 6. 정상범위를 바꿔도 결과가 유지되는가?
+
+정상범위를 `±1σ`, `±2σ`, `±3σ`로 바꿔 민감도 분석을 했습니다.
+
+| 정상범위 | Fault | Recovery 중앙값 | In-range 중앙값 | 4시간 안에 안정화 |
+|---|---|---:|---:|---:|
+| ±1σ | F4 | 13.5분 | 61.25% | 40% |
+| ±1σ | F14 | 45.0분 | 5.00% | 0% |
+| ±2σ | F4 | 6.0분 | 90.00% | 100% |
+| ±2σ | F14 | 19.5분 | 8.75% | 0% |
+| ±3σ | F4 | 6.0분 | 97.50% | 100% |
+| ±3σ | F14 | 4.5분 | 12.50% | 0% |
+
+특히 ±3σ에서는 Recovery Time 중앙값만 보면 Fault 14가 더 빠르게 보였습니다.
+
+하지만 paired comparison에서는:
+
+- Fault 14가 더 긴 경우: 12
+- 같은 경우: 2
+- Fault 14가 더 짧은 경우: 16
+- Wilcoxon p = 0.1666
+
+즉 **Recovery Time의 순위는 정상범위를 어떻게 정하느냐에 따라 흔들릴 수 있습니다.**
+
+반면 In-range Ratio와 Settling의 상대적 차이는 계속 유지됐습니다.
+
+---
+
+## 7. Moving Average가 고장을 가릴 수 있는가?
+
+3분 **raw data(가공하지 않은 원 데이터)**와 30분 **Moving Average(이동평균)**를 비교했습니다.
+
+Moving Average는 일정 시간 구간의 평균을 계속 계산해 그래프를 부드럽게 만드는 방법입니다.
+
+| Fault | Raw 최대 이탈 | 30분 MA 최대 이탈 | 정상 ±2σ 반폭 |
+|---|---:|---:|---:|
+| F4 | 0.2007 | 0.0267 | 0.0383 |
+| F14 | 0.3799 | 0.0369 | 0.0373 |
+
+30분 Moving Average를 적용하면 두 fault 모두 최대 이탈이 정상범위 반폭보다 작아졌습니다.
+
+즉 **너무 강하게 smoothing하면 짧은 spike나 빠른 oscillation이 눈에 잘 안 보일 수 있습니다.**
+
+---
+
+## 8. 프로젝트 구조
 
 ```text
-data/d04_te.dat
-data/d14_te.dat
-```
-
-각 데이터는 다음과 같이 구성됩니다.
-
-- 960 time points
-- 52 process variables
-- 41 XMEAS variables
-- 11 XMV variables
-- 3-minute sampling interval
-- 약 48시간의 시계열
-
-Fault는 8시간 시점부터 발생합니다.
-
----
-
-## 13. Data Source & License
-
-Original repository:
-
-`https://github.com/jkitchin/tennessee-eastman-profbraatz`
-
-License:
-
-**BSD-3-Clause License**
-
-공개된 TEP reference data를 분석 목적으로 사용했습니다.
-
----
-
-## 14. Missing Values & Outliers
-
-두 데이터에서 결측치는 발견되지 않았습니다.
-
-Fault 이후 나타나는 큰 온도 변화와 반복 진동은 일반적인 분석에서는 이상치처럼 보일 수 있지만 본 프로젝트에서는 바로 이러한 변화가 분석 대상입니다.
-
-따라서 값이 크다는 이유만으로 제거하지 않았습니다.
-
----
-
-## 15. AI Use & Verification
-
-생성형 AI는 다음 작업의 보조도구로 사용했습니다.
-
-- 분석 개념 학습
-- Python 코드 구현 보조
-- Recovery / Settling Time 계산방법 검토
-- IAE / ISE 개념 이해
-- Cross-correlation 및 Autocorrelation 구현
-- FFT 해석과 sampling 한계 확인
-- 보고서 구조 검토
-
-AI가 제안한 분석 결과를 그대로 사용하지 않고 모든 코드를 로컬 Jupyter 환경에서 직접 실행하여 수치와 그래프를 확인했습니다.
-
-예를 들어 온도와 압력 peak 사이의 6분 차이를 처음에는 시간지연으로 생각했지만 Cross-correlation 결과가 이를 충분히 지지하지 않아 초기 해석을 수정했습니다.
-
-자세한 AI 활용 기록과 검증 과정은 [`REPORT.md`](REPORT.md)에 정리했습니다.
-
----
-
-## 16. Repository Structure
-
-```text
-tep-cooling-fault-analysis/
+.
 ├── analysis.ipynb
+├── ack_analysis.ipynb
 ├── README.md
 ├── REPORT.md
 ├── requirements.txt
 ├── data/
-│   ├── d04_te.dat
-│   └── d14_te.dat
-└── images/
-    ├── 02_moving_average.png
-    ├── 04_control_response.png
-    ├── 07_temperature_recovery.png
-    ├── 08_control_burden.png
-    ├── 09_normalized_fault_comparison.png
-    ├── 10_temperature_fault_comparison.png
-    └── 11_fault14_autocorrelation.png
+├── images/
+├── ack_images/
+└── ack_results/
+```
+
+주요 결과 파일:
+
+```text
+ack_results/
+├── kpi_30runs.csv
+├── summary_30runs.csv
+├── statistical_tests.csv
+├── directional_consistency.csv
+└── sensitivity_sigma.csv
 ```
 
 ---
 
-## 17. Reproducibility
+## 9. 필요한 패키지
 
-필요한 라이브러리는 `requirements.txt`에 기록했습니다.
+```text
+numpy
+pandas
+matplotlib
+jupyter
+scipy
+statsmodels
+```
+
+---
+
+## 10. 실행 방법
+
+1. 필요한 라이브러리를 설치합니다.
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Jupyter Notebook을 실행합니다.
+2. TEP simulator source를 `tep_source/`에 준비합니다.
 
-```bash
-jupyter notebook
+3. 아래 simulator commit을 사용합니다.
+
+```text
+9a6c8e5fcef4a2850778704e7793c87b0a187005
 ```
 
-`analysis.ipynb`를 첫 번째 셀부터 순서대로 실행하면 주요 분석 결과를 재현할 수 있습니다.
+4. `analysis.ipynb`를 위에서 아래 순서대로 실행합니다.
+
+5. `ack_analysis.ipynb`를 위에서 아래 순서대로 실행합니다.
+
+6. 결과 CSV는 `ack_results/`, 그림은 `images/`와 `ack_images/`에서 확인할 수 있습니다.
 
 ---
 
-## 18. Detailed Report
+## 11. 데이터 출처와 라이선스
 
-분석 과정, 지표 정의, 수치 결과, 분석의 한계 및 AI 사용 기록은 아래 보고서에서 확인할 수 있습니다.
-
-**[REPORT.md](REPORT.md)**
+- Reference data / simulator: `jkitchin/tennessee-eastman-profbraatz`
+- License: BSD-3-Clause
+- Reference data: 약 0~48시간, 3분 간격
+- 반복 simulation: 0~12시간, 3분 간격
+- Fault onset: 8시간
 
 ---
 
-## 19. Main Conclusion
+## 12. 한계
 
-공정 출력값이 순간적으로 정상범위로 돌아온 것과 실제 공정이 안정적으로 회복된 것은 서로 다를 수 있습니다.
+- Fault 4와 Fault 14 두 조건에 집중한 case study입니다.
+- 주요 output은 Reactor Temperature입니다.
+- 정상범위는 실제 안전 운전범위가 아니라 통계적 기준입니다.
+- Settling은 Fault 후 4시간 관측창 안에서만 판단했습니다.
+- Control Burden은 실제 물 또는 에너지 비용이 아닙니다.
+- 결과는 사용한 closed-loop PI controller와 함께 나타난 response입니다.
 
-또한 같은 냉각계 관련 고장이라도 원인에 따라 순간 spike, 지속적인 진동, 제어신호의 움직임 등 서로 다른 시계열 특징이 나타났습니다.
+---
 
-따라서 공정 이상을 평가할 때 현재 센서값 하나만 확인하기보다 회복시간, 안정화 여부, 누적 오차, 정상범위 체류율, 조작변수의 움직임을 함께 확인할 필요가 있습니다.
+## 한 줄 결론
+
+> **정상범위에 한 번 들어온 것과 안정적으로 회복한 것은 다르다. Recovery Time 하나보다 In-range Ratio, Settling, 누적 오차와 제어입력 부담을 함께 보는 것이 더 안정적인 평가를 제공한다.**
